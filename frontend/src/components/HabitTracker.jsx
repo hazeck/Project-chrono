@@ -7,30 +7,50 @@ function HabitTracker() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const itemsPerPage = 5;
-  const totalPages = Math.ceil(habitList.length / itemsPerPage);
 
+  // Load habits from localStorage on initial render
   useEffect(() => {
-    const storedHabits = JSON.parse(localStorage.getItem('habits'));
-    if (storedHabits) setHabitList(storedHabits);
+    const stored = JSON.parse(localStorage.getItem('habits'));
+    if (stored) setHabitList(stored);
   }, []);
 
+  // Save to localStorage whenever habit list changes
   useEffect(() => {
     localStorage.setItem('habits', JSON.stringify(habitList));
   }, [habitList]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmed = habit.trim();
     if (!trimmed) return;
+
     if (habitList.includes(trimmed)) {
       setSuccessMsg('Habit already exists!');
       return;
     }
-    setHabitList([...habitList, trimmed]);
+
+    // Add locally
+    const updatedList = [...habitList, trimmed];
+    setHabitList(updatedList);
     setHabit('');
     setSuccessMsg('Habit added!');
     setTimeout(() => setSuccessMsg(''), 2000);
-    setCurrentPage(totalPages + 1); // Move to last page to see new item
+    setCurrentPage(Math.ceil(updatedList.length / itemsPerPage)); // move to last page
+
+    // Send to backend
+    try {
+      const res = await fetch('http://localhost:5000/habits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+
+      if (!res.ok) {
+        console.error('Backend rejected habit');
+      }
+    } catch (err) {
+      console.error('Error connecting to backend:', err);
+    }
   };
 
   const handleDelete = (index) => {
@@ -38,14 +58,13 @@ function HabitTracker() {
     updated.splice(index, 1);
     setHabitList(updated);
     if (currentPage > 1 && (currentPage - 1) * itemsPerPage >= updated.length) {
-      setCurrentPage(currentPage - 1); // Move back if last item on page is deleted
+      setCurrentPage(currentPage - 1);
     }
   };
 
-  // Pagination logic
   const start = (currentPage - 1) * itemsPerPage;
-  const end = start + itemsPerPage;
-  const visibleHabits = habitList.slice(start, end);
+  const visibleHabits = habitList.slice(start, start + itemsPerPage);
+  const totalPages = Math.ceil(habitList.length / itemsPerPage);
 
   return (
     <section>
@@ -53,7 +72,7 @@ function HabitTracker() {
       <form onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="e.g. Drink Water"
+          placeholder="e.g. Journal at night"
           value={habit}
           onChange={(e) => setHabit(e.target.value)}
         />
@@ -62,22 +81,21 @@ function HabitTracker() {
       {successMsg && <p>{successMsg}</p>}
 
       <ul>
-        {visibleHabits.map((h, index) => (
-          <li key={start + index}>
-            {h} <button onClick={() => handleDelete(start + index)}>❌</button>
+        {visibleHabits.map((h, i) => (
+          <li key={start + i}>
+            {h} <button onClick={() => handleDelete(start + i)}>❌</button>
           </li>
         ))}
       </ul>
 
-      {/* Pagination Controls */}
-      <div style={{ margin: "1em 0" }}>
+      <div style={{ margin: '1em 0' }}>
         <button
           onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
           disabled={currentPage === 1}
         >
           Previous
         </button>
-        <span style={{ margin: "0 1em" }}>
+        <span style={{ margin: '0 1em' }}>
           Page {currentPage} of {totalPages || 1}
         </span>
         <button
@@ -89,7 +107,9 @@ function HabitTracker() {
       </div>
 
       {habitList.length > 0 && (
-        <button onClick={() => { setHabitList([]); setCurrentPage(1); }}>Clear All Habits</button>
+        <button onClick={() => { setHabitList([]); setCurrentPage(1); }}>
+          Clear All Habits
+        </button>
       )}
     </section>
   );
